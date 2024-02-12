@@ -1,0 +1,45 @@
+pipeline {
+    agent any
+
+    environment {
+        registry = "ananthdevulapalli/web"
+        registryCredential = 'docker'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'd79075a4-8fa8-4803-bfbc-fe76bbbfa56c', url: 'https://github.com/ananthdevulapalli/demo-java.git']]])
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Copy docker file') {
+            steps {
+                sh 'cp Dockerfile /var/lib/jenkins/workspace/Maven_Test/target/'
+                sh 'mkdir /var/lib/jenkins/workspacae/Maven_Test/target/report'
+            }
+        }
+
+        stage('Docker Tomcat Image') {
+            steps {
+                script {
+                     dir("/var/lib/jenkins/workspace/Maven_Test/target/") {
+          dockerImage = docker.build registry + ":demo$BUILD_NUMBER"
+          }
+		  sh 'mkdir  -p /var/lib/jenkins/workspace/Maven_Test/target/report/${BUILD_NUMBER}'
+		  sh 'trivy image --security-checks vuln,config --vuln-type os,library --ignore-unfixed --format template --template "@/usr/local/share/trivy/templates/html.tpl" -o /var/lib/jenkins/workspace/Maven_Test/target/report/${BUILD_NUMBER}.html ananthdevulapalli/web:demo$BUILD_NUMBER'
+          docker.withRegistry( '', registryCredential ) {
+            dockerImage.push()
+          }
+          sh "docker rmi $registry:demo$BUILD_NUMBER"
+                }
+            }
+        }
+    }
+}
